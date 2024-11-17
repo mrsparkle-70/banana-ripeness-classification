@@ -10,34 +10,42 @@ const selected_image = document.getElementById('selected-image');
 const image_selector = document.getElementById('image-selector');
 const status_message = document.getElementById('status');
 const predict_result = document.getElementById('prediction-result');
+const loading_spinner = document.getElementById('loading-spinner');
 
 const status = msg => status_message.innerText = msg;
 
 let model;
 const modelDemo = async () => {
+    // Show loading spinner and status message
+    loading_spinner.style.display = 'inline-block';
     status('Loading model...');
-    // load model
+    
+    // Load model
     model = await tf.loadLayersModel(MODEL_PATH);
-    // warmup
+    
+    // Warmup model
     model.predict(tf.zeros([1, IMAGE_SIZE, IMAGE_SIZE, 3])).dispose();
+    
+    // Hide loading spinner and status
+    loading_spinner.style.display = 'none';
     status('');
 
-    // predict sample image
+    // Predict sample image if it’s already loaded
     if (selected_image.complete && selected_image.naturalHeight !== 0) {
         predict(selected_image);
     } else {
         selected_image.onload = () => {
-            predict_button(selected_image);
+            predict(selected_image);
         }
     }
 };
 
 async function predict(image) {
-    // clean text before predicting
+    // Clear previous prediction result and display status
     predict_result.innerText = '';
-
     status('Predicting...');
-    const startTime = performance.now();
+    
+    // Perform prediction
     const logits = tf.tidy(() => {
         const img = tf.browser.fromPixels(image).toFloat();
         const offset = tf.scalar(127.5);
@@ -46,37 +54,34 @@ async function predict(image) {
         return model.predict(batched);
     });
 
-    showResult(logits);
-    
-    const totalTime = performance.now() - startTime;
-    status(`Done in ${Math.floor(totalTime)}ms.`);
+    await showResult(logits);
+    status('Done');
 }
 
 async function showResult(logits) {
-    const message = {
+    const messages = {
         0: 'This banana looks a little green! Wait a little longer before eating it.',
         1: 'This banana looks rotten or overripe. I would not eat it if I were you.',
         2: 'Yum! Looks ripe to me!'
-    }
+    };
 
     const values = await logits.data();
-    console.log(values);
-
     const class_idx = logits.argMax(1).dataSync();
-    predict_result.innerText = message[class_idx];
+    predict_result.innerText = messages[class_idx];
 }
 
 image_selector.addEventListener('change', evt => {
     let files = evt.target.files;
 
     for (let i = 0, f; f = files[i]; ++i) {
-        if (!f.type.match('image.*')) { continue; }
+        if (!f.type.match('image.*')) continue;
 
         let reader = new FileReader();
         reader.onload = e => {
             selected_image.src = e.target.result;
             selected_image.width = IMAGE_SIZE;
             selected_image.height = IMAGE_SIZE;
+            selected_image.hidden = false;
             selected_image.onload = () => predict(selected_image);
         };
 
